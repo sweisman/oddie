@@ -1,11 +1,15 @@
 # oddie
+
 ODBC SQL Query daemon
+
 Copyright (C) Scott Weisman
 
 oddie - run SQL queries, command line ODBC access
+
 Can do single queries or run in "daemon" mode.
 
 ### Usage: `oddie DRVC [SQL]`
+
 Where `DRVC` is the ODBC driver connection string and can specify a:
 ```
     registered DSN: "DSN=registered_dsn_name;uid=myusername;pwd=mypassword"
