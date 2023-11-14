@@ -53,7 +53,7 @@ The semi-colon is a terminator and is always required. After a terminator is rec
 
 ### In daemon mode:
 
-After init, oddies outputs `OK` to STDIO and then listens to STDIN for commands of the above format.
+After init, oddie outputs `OK` to STDIO and then listens to STDIN for commands of the above format.
 
 To terminate, send `CLOSE=0;` provides a clean shutdown but is optional.
 
