@@ -45,7 +45,7 @@ When returning SELECT results: `RESULT="encoded output of header and rows",MD5=X
 
 For RESULT and ERROR, encoding is:
 
-Each field has certain characters (eg `\n`, `\t`, `=`, `;`, etc.) hex-encoded.
+Each field has certain characters (eg `\n`, `\t`, `=`, `;`, etc.) hex-encoded (eg `\t` becomes `%09`, `\n` become `%0a`).
 
 Additionally, for RESULT:
 
