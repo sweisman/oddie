@@ -2,8 +2,6 @@
 
 ODBC SQL Query daemon
 
-Copyright (C) Scott Weisman
-
 oddie - run SQL queries, command line ODBC access
 
 Can do single queries or run in "daemon" mode.
