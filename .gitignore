@@ -1,52 +1,26 @@
-# Prerequisites
-*.d
+# zlib source files (fetched by build.sh)
+compress.c
+deflate.c
+crc32.c
+adler32.c
+trees.c
+zutil.c
+zlib.h
+zconf.h
+deflate.h
+zutil.h
+trees.h
+inffixed.h
+inffast.h
+inftrees.h
+inflate.h
+crc32.h
+gzguts.h
+zlib-*/
+zlib*.tar.gz
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+# build output
+oddie.exe
 
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# local dev config
+CLAUDE.md

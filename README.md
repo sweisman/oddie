@@ -10,9 +10,9 @@ Can do single queries or run in "daemon" mode.
 
 Where `DRVC` is the ODBC driver connection string and can specify a:
 ```
-    registered DSN: "DSN=registered_dsn_name;uid=myusername;pwd=mypassword"
-    or
-    driver: "Driver={Microsoft Access Driver (*.mdb)};DBQ=myfile.mdb"
+registered DSN: "DSN=registered_dsn_name;uid=myusername;pwd=mypassword"
+or
+driver: "Driver={Microsoft Access Driver (*.mdb)};DBQ=myfile.mdb"
 ```
 
 `SQL` is optional; a valid SQL statement.
@@ -21,13 +21,23 @@ If no SQL statement is provided, oddie enters daemon mode and accepts properly f
 
 ### Format of input:
 
-`SQL="any valid select/insert/update/delete",MD5="_MD5SUM_OF_PREVIOUS_RESULTS_",ZIP=[0-9];`
+`SQL="any valid select/insert/update/delete",ID="correlation_id",MD5="_MD5SUM_OF_PREVIOUS_RESULTS_",ZIP=[0-9];`
 
-MD5 and ZIP are optional, and only relevant for SELECT queries. If specified:
+To list all tables, views, and other objects in the data source, send `TABLES=1` instead of a SQL statement:
 
-For MD5, if the MD5 of the query results is equal to what is submitted, return result: `xxx`. If not specified, or not equal, return complete result set.
+`TABLES=1,ID="optional_correlation_id",MD5="optional_previous_md5",ZIP=[0-9];`
 
-For ZIP, compress results to the level specified (useful for very large result sets).
+The response is a result set with five columns: `TABLE_CAT`, `TABLE_SCHEM`, `TABLE_NAME`, `TABLE_TYPE`, `REMARKS`. Use the `TABLE_TYPE` column to filter by `TABLE`, `VIEW`, etc.
+
+`ID`, `MD5`, and `ZIP` are all optional.
+
+`ID` is an opaque string echoed back in the response for call correlation.
+
+`MD5` and `ZIP` are only relevant for SELECT queries. If specified:
+
+For `MD5`, if the MD5 of the query results matches the submitted value, return `MD5=HASH,RESULT=CACHED;` instead of the full result set. If not specified, or not equal, return the complete result set.
+
+For `ZIP`, compress results to the level specified (0 = none, 1–9 = zlib compression; useful for very large result sets).
 
 ### Format of output:
 
@@ -39,7 +49,9 @@ When a SELECT MD5 value matches: `MD5=FF1519FFFFFFFFFFFFFFFF115B15FFFF,RESULT=CA
 
 When a SELECT has no results: `RESULT="";`
 
-When returning SELECT results: `RESULT="encoded output of header and rows",MD5=XXX;`
+When returning SELECT results: `RESULT="encoded output of header and rows",MD5=HASH;` or with compression: `RESULT="compressed_encoded_data",MD5=HASH,ZIP=level;`
+
+When an `ID` was supplied in the request, it is echoed at the start of the response: `ID="value",RESULT=...;`
 
 For RESULT and ERROR, encoding is:
 
@@ -63,9 +75,11 @@ To terminate, send `CLOSE=0;` provides a clean shutdown but is optional.
 
 MD5 implementation (included)
 
-[Zlib](https://www.zlib.net/) (download latest and extract `*.c` and `*.h` files to the repo directory)
+Zlib (fetched automatically by `build.sh`)
 
-### To cross-compile using Linux (Windows using MinGW is similar):
+### To build (cross-compile on Linux for Windows):
 ```
-i686-w64-mingw32-gcc -Wall -Wextra -pedantic -std=gnu99 -Werror -Os -s -static -I /opt/cmf/src/oddie oddie.c md5.c compress.c deflate.c crc32.c adler32.c trees.c zutil.c -o oddie.exe -lodbc32 -Wl,-verbose,--subsystem,console
+./build.sh
 ```
+
+Requires `curl`, `tar`, and a MinGW cross-compiler (`i686-w64-mingw32-gcc`, `i686-pc-mingw32-gcc`, or `mingw32-gcc`). The script checks [zlib.net](https://zlib.net) for a newer zlib version and downloads it if available.

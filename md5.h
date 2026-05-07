@@ -1,8 +1,8 @@
 #ifndef MD5_H
 #define MD5_H
 
-// xxx add ifdef for 64 bits
-typedef unsigned long uint32;
+#include <stdint.h>
+typedef uint32_t uint32;
 
 typedef struct
 {

@@ -27,6 +27,11 @@
 #ifndef WIN32 /* unlink already in stdio.h for WIN32 */
   extern int unlink OF((const char *));
 #endif
+#if defined(WIN32)
+#  define DELETE_FILE(f) DeleteFile(f)
+#else
+#  define DELETE_FILE(f) unlink(f)
+#endif
 
 #define QUERY_BUFFER_SIZE 8192
 #define Z_CHUNK (256 * 1024)
@@ -48,7 +53,7 @@ typedef struct
 
 typedef struct
 {
-    SQLCHAR       col_name[64];
+    SQLCHAR       col_name[128];
     SQLSMALLINT   col_name_len;
     SQLSMALLINT   data_type;
     SQLUINTEGER   col_size;
@@ -63,6 +68,7 @@ typedef struct
     char    md5[33];
     char    sql[QUERY_BUFFER_SIZE];
     int     zip;
+    int     tables;
 } s_request;
 
 char *field_sep = "\t", *rec_sep = "\n";
@@ -87,7 +93,7 @@ int main(int argc, char *argv[])
     FILE          *stream, *zstream;
     s_request     request = {0};
     int           argi = 1;
-    unsigned long length;
+    unsigned long result_char_len;
     unsigned char buffer[1024 + 1], daemon = 0;
     char          md5[33], *query = NULL, *encoded = NULL, filename[MAX_PATH], zfilename[MAX_PATH];
 
@@ -137,11 +143,11 @@ int main(int argc, char *argv[])
 
     for (;;)
     {
-        if ((daemon && !get_request(&request)) || !query[0])
+        if (daemon ? !get_request(&request) : !query[0])
             break;
 
         char *sql = query;
-        while (sql[0] < 33)
+        while (sql[0] && sql[0] < 33)
             sql++;
         char sql_type = tolower(sql[0]);
 
@@ -151,107 +157,16 @@ int main(int argc, char *argv[])
         if (error("SQLAllocHandle3", rv, SQL_HANDLE_DBC, dbh) || !sth)
             goto CLEANUP;
 
-        if (sql_type == 't')
+        if (request.tables)
         {
-            // list tables
-            //~ https://learn.microsoft.com/en-us/sql/odbc/reference/syntax/sqltables-function?view=sql-server-ver16
-
-            //~ int numCols = 5;
-            //~ DataBinding *catalogResult = (struct DataBinding *) malloc(numCols * sizeof(struct DataBinding));
-
-            //~ // allocate memory for the binding - free this memory when done
-            //~ for (i = 0; i < numCols; i++)
-            //~ {
-                //~ catalogResult[i].TargetType = SQL_C_CHAR;
-                //~ catalogResult[i].BufferLength = (1024 + 1);
-                //~ catalogResult[i].TargetValuePtr = malloc(sizeof(unsigned char) * catalogResult[i].BufferLength);
-            //~ }
-
-            //~ // setup the binding (can be used even if the statement is closed by closeStatementHandle)
-            //~ for (i = 0 ; i < numCols ; i++)
-                //~ rv = SQLBindCol(sth, (SQLUSMALLINT) i + 1, catalogResult[i].TargetType, catalogResult[i].TargetValuePtr, catalogResult[i].BufferLength, &(catalogResult[i].StrLen_or_Ind));
-
-// output header row
-//~ for (i = 1; i <= col_count; i++)
-//~ {
-    //~ buffer = (unsigned char *) url_encode((char *) col_data[i].col_name, strlen((char *) col_data[i].col_name), 0, NULL);
-    //~ fputs((char *) buffer, stream);
-    //~ free(buffer);
-    //~ if (i < col_count)
-        //~ fputs(field_sep, stream);  encode_out(stdout, field_sep, 1);
-
-//~ }
-
-//~ fputs(rec_sep, stream); encode_out(stdout, rec_sep, 1);
-
-//~ fputs("RESULT=\"", stdout);
-//~ while ((i = fread(buffer, 1, 1024, stream)))
-    //~ encode_out(stdout, buffer, i);
-//~ fputs("\";", stdout);
-
-//~ for (;;)
-//~ {
-    //~ rv = SQLFetch(sth);
-
-    //~ if (IS_SQL_SUCCESS(rv))
-    //~ {
-        //~ for (i = 1; i <= col_count; i++)
-        //~ {
-            //~ for (;;)
-            //~ {
-                //~ rv = SQLGetData(sth, i, col_data[i].data_type, buffer, buffer_size, &copy_len);
-
-                //~ if (IS_SQL_SUCCESS(rv) && copy_len != SQL_NULL_DATA && copy_len != 0)
-                //~ {
-                    //~ copy_len = ((SQLUINTEGER) copy_len > buffer_size) || (copy_len == SQL_NO_TOTAL) ? (SQLINTEGER) buffer_size : copy_len;
-                    //~ *total_len += encode_out(stream, buffer, copy_len);
-                    //~ MD5Update(&md5_state, buffer, copy_len);
-
-                    //~ if (rv == SQL_SUCCESS_WITH_INFO && SQLGetDiagField(SQL_HANDLE_STMT, sth, 1, i, &status, SQL_INTEGER, &status_size) != SQL_NO_DATA)
-                        //~ continue;
-                //~ }
-
-                //~ break;
-            //~ }
-
-//~ do {
-//~ rv = SQLGetData(sth, i, col_data[i].data_type, buffer, buffer_size, &copy_len);
-//~ } while (rv == SQL_SUCCESS_WITH_INFO && SQLGetDiagField(SQL_HANDLE_STMT, sth, 1, i, &status, SQL_INTEGER, &statuslen) != SQL_NO_DATA);
-
-            //~ if (i < col_count)
-                //~ fputs(field_sep, stream);
-        //~ }
-
-        //~ fputs(rec_sep, stream);
-    //~ }
-    //~ else
-        //~ break;
-//~ }
-
-            // all catalogs query
-            //~ printf("table\n");
-            //~ rv = SQLTables(sth, (SQLCHAR *) SQL_ALL_CATALOGS, SQL_NTS, (SQLCHAR *) "", SQL_NTS, (SQLCHAR *) "", SQL_NTS, (SQLCHAR *) "", SQL_NTS);
-            //~ for (rv = SQLFetch(sth); IS_SQL_SUCCESS(rv); rv = SQLFetch(sth))
-                //~ if (catalogResult[0].StrLen_or_Ind != SQL_NULL_DATA)
-                    //~ printf("%s\n", (char *) catalogResult[0].TargetValuePtr);
-
-            //~ for (i = 0; i < numCols; i++)
-                //~ free(catalogResult[i].TargetValuePtr);
-            //~ free(catalogResult);
-        }
-        else
-        {
-            // select/insert/update/delete
-            rv = SQLExecDirect(sth, (UCHAR *) sql, SQL_NTS);
-            if (error("SQLExecDirect", rv, SQL_HANDLE_STMT, sth))
+            // SQLTables returns a standard result set: TABLE_CAT, TABLE_SCHEM,
+            // TABLE_NAME, TABLE_TYPE, REMARKS. NULL arguments mean "all".
+            rv = SQLTables(sth, NULL, 0, NULL, 0, NULL, 0, NULL, 0);
+            if (error("SQLTables", rv, SQL_HANDLE_STMT, sth))
                 goto CLEANUP;
 
             rv = SQLNumResultCols(sth, &col_count);
             if (error("SQLNumResultCols", rv, SQL_HANDLE_STMT, sth) || col_count < 0)
-                goto CLEANUP;
-
-            rv = SQLRowCount(sth, &row_count);
-            if (error("SQLRowCount", rv, SQL_HANDLE_STMT, sth))
                 goto CLEANUP;
 
             if (request.id[0])
@@ -261,28 +176,17 @@ int main(int argc, char *argv[])
                 free(encoded);
             }
 
-            if ((sql_type == 'i' || sql_type == 'u' || sql_type == 'd') && row_count > -1)
+            if (col_count < 1)
             {
-                // insert/update/delete
-                // ODBC specifies SQLRowCount() only returns a value on INSERT/UPDATE/DELETE
-                // but MariaDB ODBC connector doesn't adhere to the spec, hence the special case code
-                // they thought they were clever. they were, but they were wrong
-                // only return ROWCOUNT according to the ODBC spec
-                printf("ROWCOUNT=%d;", (int) row_count);
-            }
-            else if (col_count < 1)
-            {
-                // select without results
                 fputs("RESULT=\"\";", stdout);
             }
             else
             {
-                // select with results
                 filename[0] = 0;
                 temp_file_name(filename);
 
                 stream = fopen(filename, "wb");
-                sql_fetch(sth, col_count, stream, md5, &length); // xxx length is total char length of returned data
+                sql_fetch(sth, col_count, stream, md5, &result_char_len);
                 fclose(stream);
 
                 printf("MD5=%s,", md5);
@@ -293,10 +197,10 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    if (length < 128)
+                    if (result_char_len < 128)
                         request.zip = 0;
                     else if (request.zip)
-                        request.zip = (length < 512 ? 5 : 9);
+                        request.zip = (result_char_len < 512 ? 5 : 9);
 
                     if (request.zip)
                     {
@@ -328,10 +232,108 @@ int main(int argc, char *argv[])
                     fclose(stream);
 
                     if (request.zip)
-                        DeleteFile(zfilename);
+                        DELETE_FILE(zfilename);
                 }
 
-                DeleteFile(filename);
+                DELETE_FILE(filename);
+            }
+
+            fflush(stdout);
+        }
+        else
+        {
+            // select/insert/update/delete
+            rv = SQLExecDirect(sth, (UCHAR *) sql, SQL_NTS);
+            if (error("SQLExecDirect", rv, SQL_HANDLE_STMT, sth))
+                goto CLEANUP;
+
+            rv = SQLNumResultCols(sth, &col_count);
+            if (error("SQLNumResultCols", rv, SQL_HANDLE_STMT, sth) || col_count < 0)
+                goto CLEANUP;
+
+            rv = SQLRowCount(sth, &row_count);
+            if (error("SQLRowCount", rv, SQL_HANDLE_STMT, sth))
+                goto CLEANUP;
+
+            if (request.id[0])
+            {
+                encoded = url_encode(request.id, strlen(request.id), 0, NULL);
+                printf("ID=\"%s\",", encoded);
+                free(encoded);
+            }
+
+            if ((sql_type == 'i' || sql_type == 'u' || sql_type == 'd') && row_count > -1)
+            {
+                // insert/update/delete
+                // ODBC specifies SQLRowCount() only returns a meaningful value on
+                // INSERT/UPDATE/DELETE. MariaDB's ODBC connector incorrectly returns a
+                // non-negative row count for SELECT too, violating the spec. The sql_type
+                // check is the primary guard; row_count > -1 is a secondary sanity check
+                // that also excludes EXEC/DDL statements.
+                printf("ROWCOUNT=%d;", (int) row_count);
+            }
+            else if (col_count < 1)
+            {
+                // select without results
+                fputs("RESULT=\"\";", stdout);
+            }
+            else
+            {
+                // select with results
+                filename[0] = 0;
+                temp_file_name(filename);
+
+                stream = fopen(filename, "wb");
+                sql_fetch(sth, col_count, stream, md5, &result_char_len);
+                fclose(stream);
+
+                printf("MD5=%s,", md5);
+
+                if (request.md5[0] && strcmp(md5, request.md5) == 0)
+                {
+                    fputs("RESULT=CACHED;", stdout);
+                }
+                else
+                {
+                    if (result_char_len < 128)
+                        request.zip = 0;
+                    else if (request.zip)
+                        request.zip = (result_char_len < 512 ? 5 : 9);
+
+                    if (request.zip)
+                    {
+                        printf("ZIP=%d,", request.zip);
+
+                        zfilename[0] = 0;
+                        temp_file_name(zfilename);
+
+                        stream = fopen(filename, "rb");
+                        zstream = fopen(zfilename, "wb");
+
+                        rv = oddie_deflate(stream, zstream, request.zip);
+
+                        fclose(stream);
+                        fclose(zstream);
+
+                        stream = fopen(zfilename, "rb");
+                    }
+                    else
+                        stream = fopen(filename, "rb");
+
+                    fputs("RESULT=\"", stdout);
+
+                    while ((i = fread(buffer, 1, 1024, stream)))
+                        encode_out(stdout, buffer, i);
+
+                    fputs("\";", stdout);
+
+                    fclose(stream);
+
+                    if (request.zip)
+                        DELETE_FILE(zfilename);
+                }
+
+                DELETE_FILE(filename);
             }
 
             fflush(stdout);
@@ -465,15 +467,15 @@ void sql_fetch(SQLHSTMT sth, SQLSMALLINT col_count, FILE *stream, char *md5, uns
     free(col_data);
     free(buffer);
     MD5Final(md5_raw, &md5_state);
-// xxx do i need to free(md5_state)?
 
     url_encode((char *) md5_raw, 16, 1, md5);
 }
 
-#define tID     1
-#define tMD5    2
-#define tZIP    3
-#define tSQL    4
+#define tID      1
+#define tMD5     2
+#define tZIP     3
+#define tSQL     4
+#define tTABLES  5
 
 int get_request(s_request *request)
 {
@@ -482,7 +484,7 @@ int get_request(s_request *request)
     int target = 0;
     char c, hex_hi, hex_low;
 
-    request->zip = request->id[0] = request->md5[0] = request->sql[0] = buffer[0] = 0;
+    request->zip = request->tables = request->id[0] = request->md5[0] = request->sql[0] = buffer[0] = 0;
 
     while (!feof(stdin))
     {
@@ -506,6 +508,9 @@ int get_request(s_request *request)
                 case 'S':
                     target = tSQL;
                     break;
+                case 'T':
+                    target = tTABLES;
+                    break;
                 default:
                     return 0;
             }
@@ -519,16 +524,37 @@ int get_request(s_request *request)
             switch (target)
             {
                 case tID:
-                    strncpy(request->id, buffer, 64);
+                    if (pos >= sizeof(request->id))
+                    {
+                        fputs("ERROR=\"ID field too long\";", stdout);
+                        fflush(stdout);
+                        return 0;
+                    }
+                    strncpy(request->id, buffer, sizeof(request->id));
                     break;
                 case tMD5:
-                    strncpy(request->md5, buffer, 33);
+                    if (pos >= sizeof(request->md5))
+                    {
+                        fputs("ERROR=\"MD5 field too long\";", stdout);
+                        fflush(stdout);
+                        return 0;
+                    }
+                    strncpy(request->md5, buffer, sizeof(request->md5));
                     break;
                 case tSQL:
+                    if (pos >= QUERY_BUFFER_SIZE)
+                    {
+                        fputs("ERROR=\"SQL query exceeds 8192 byte limit\";", stdout);
+                        fflush(stdout);
+                        return 0;
+                    }
                     strncpy(request->sql, buffer, QUERY_BUFFER_SIZE);
                     break;
                 case tZIP:
                     request->zip = atoi(buffer);
+                    break;
+                case tTABLES:
+                    request->tables = atoi(buffer);
                     break;
                 default:
                     return 0;
@@ -555,8 +581,12 @@ int get_request(s_request *request)
                 }
 
                 buffer[pos] = c;
-                    if (++pos > sizeof(buffer))
+                if (++pos >= sizeof(buffer))
+                {
+                    fputs("ERROR=\"request too long\";", stdout);
+                    fflush(stdout);
                     return 0;
+                }
             }
 
             buffer[pos] = 0;
@@ -564,8 +594,12 @@ int get_request(s_request *request)
         else if (isalnum(c))
         {
             buffer[pos] = c;
-            if (++pos > sizeof(buffer))
+            if (++pos >= sizeof(buffer))
+            {
+                fputs("ERROR=\"request too long\";", stdout);
+                fflush(stdout);
                 return 0;
+            }
         }
     }
 
