@@ -35,9 +35,11 @@ The response is a result set with five columns: `TABLE_CAT`, `TABLE_SCHEM`, `TAB
 
 `MD5` and `ZIP` are only relevant for SELECT queries. If specified:
 
-For `MD5`, if the MD5 of the query results matches the submitted value, return `MD5=HASH,RESULT=CACHED;` instead of the full result set. If not specified, or not equal, return the complete result set.
+For `MD5`, if the MD5 of the query results matches the submitted value, return `MD5=HASH,RESULT=CACHED;` instead of the full result set. If not specified, or not equal, return the complete result set. The hash is computed over the uncompressed, encoded RESULT payload (header, rows, and separators), so a client can recompute it from a received result. Comparison is case-insensitive.
 
-For `ZIP`, compress results to the level specified (0 = none, 1–9 = zlib compression; useful for very large result sets).
+For `ZIP`, compress results to the level specified (0 = none, 1–9 = zlib compression; useful for very large result sets). Results shorter than 128 bytes are never compressed, and the `ZIP=` key is omitted from the response in that case.
+
+`SQL` is limited to 8191 bytes and `ID` to 63 bytes.
 
 ### Format of output:
 
@@ -45,13 +47,17 @@ On error: `ERROR="encoded error message(s) as reported by ODBC";`
 
 On insert, update, delete: `ROWCOUNT=num_of_rows_affected;`
 
-When a SELECT MD5 value matches: `MD5=FF1519FFFFFFFFFFFFFFFF115B15FFFF,RESULT=CACHED;`
+When a SELECT MD5 value matches: `MD5=3A7BD3E2360A3D29EEA436FCFB7E44C1,RESULT=CACHED;`
 
 When a SELECT has no results: `RESULT="";`
 
-When returning SELECT results: `RESULT="encoded output of header and rows",MD5=HASH;` or with compression: `RESULT="compressed_encoded_data",MD5=HASH,ZIP=level;`
+When returning SELECT results: `MD5=HASH,RESULT="encoded output of header and rows";` or with compression: `MD5=HASH,ZIP=level,RESULT="compressed_encoded_data";`
 
-When an `ID` was supplied in the request, it is echoed at the start of the response: `ID="value",RESULT=...;`
+Keys within a response may appear in any order. Clients must parse by key name and not depend on the position of `MD5`, `ZIP`, or `RESULT`.
+
+When an `ID` was supplied in the request, it is echoed at the start of every response for that request, including errors: `ID="value",RESULT=...;` or `ID="value",ERROR="...";`
+
+A malformed request (unknown key, over-long field, missing SQL) gets an `ERROR="..."` response and is skipped; the daemon keeps running.
 
 For RESULT and ERROR, encoding is:
 
@@ -69,7 +75,9 @@ The semi-colon is a terminator and is always required. After a terminator is rec
 
 After init, oddie outputs `OK` to STDIO and then listens to STDIN for commands of the above format.
 
-To terminate, send `CLOSE=0;` provides a clean shutdown but is optional.
+To terminate, send `CLOSE=0;` (or close STDIN). Both provide a clean shutdown.
+
+A statement-level ODBC error (bad SQL, constraint violation, etc.) produces an `ERROR="...";` response and the daemon continues to serve requests on the same connection. The daemon only exits on its own when the database connection is lost (SQLSTATE `08xxx`, or the driver reports the connection dead), in which case the exit code is 1. The caller should be prepared to restart it in that case.
 
 ### Dependencies:
 
